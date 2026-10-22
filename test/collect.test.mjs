@@ -1,3 +1,5 @@
+// 这些用例是 scripts/collect.mjs 解析正则的唯一护栏。
+// 只改正则不加用例 = 悄悄改数据口径。改这里等于改口径，commit message 要写明。
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
@@ -150,4 +152,40 @@ test('qaRounds：统计同一 PR 多轮结论', () => {
   assert.deepEqual(qaRounds('QA 结论：FAIL\n被测 commit：9741830\n'), ['FAIL']);
   assert.deepEqual(qaRounds('PASS\n被测 commit：d4b0228\n'), ['PASS']);
   assert.deepEqual(qaRounds('随手一提 PASS 不算。'), []);
+});
+
+// ---- 异常输入边界（这些是真实 QA 评论可能出现、但现有数据没出现过的形态）----
+
+test('边界：正文里孤立成行的 FAIL 不被当成结论（日志粘贴场景）', () => {
+  const body = [
+    'PASS',
+    '被测 commit：d4b0228',
+    '',
+    '测试输出：',
+    'FAIL',
+    'ok 12 - 其他用例',
+  ].join('\n');
+  assert.deepEqual(parseQa(body), { result: 'PASS', commit: 'd4b0228' });
+});
+
+test('边界：裸结论不在首行时不算结论', () => {
+  const body = '# QA 报告\n\nPASS\n被测 commit：d4b0228\n';
+  assert.equal(parseQa(body), null);
+});
+
+test('边界：一条评论贴两轮记录时，结论与 commit 取最后一组', () => {
+  const body = [
+    'QA 结论：FAIL',
+    '被测 commit：9741830',
+    '',
+    '修复后：',
+    'QA 结论：PASS',
+    '被测 commit：a3110ad',
+  ].join('\n');
+  assert.deepEqual(parseQa(body), { result: 'PASS', commit: 'a3110ad' });
+});
+
+test('边界：多轮记录的 fail_count 由 qaRounds 全量统计', () => {
+  const body = 'QA 结论：FAIL\n被测 commit：9741830\nQA 结论：PASS\n被测 commit：a3110ad';
+  assert.deepEqual(qaRounds(body), ['FAIL', 'PASS']);
 });

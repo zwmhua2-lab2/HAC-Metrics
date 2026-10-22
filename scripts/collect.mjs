@@ -1,5 +1,9 @@
 // 只采集 GitHub 上可观察的客观事实，不做判断，不调用模型。
 // 解析不出来一律写 unknown / null，不推断。
+//
+// ⚠ 改这里的任何解析正则，必须同步改 test/collect.test.mjs 对应用例。
+//   解析规则是这套数据的唯一误差来源，没有测试覆盖的改动不要合。
+//   每个正则上方的 "test:" 注释标明它由哪些用例守着。
 import { mkdir, writeFile, readdir } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 
@@ -9,6 +13,7 @@ const OUT = process.env.OUT_DIR ?? 'data';
 
 // ---------- 纯函数（可单测，不触网） ----------
 
+// test: parseRisk：中英文冒号与 markdown 加粗
 const RISK = /风险[:：]\s*\**\s*(高|低)/;
 
 export function parseRisk(body = '') {
@@ -23,6 +28,7 @@ function quotedPaths(line) {
   return [...line.matchAll(quoteRe)].map((m) => m[1].trim()).filter(looksLikePath);
 }
 
+// test: parseAllowed：块格式 / 内联格式 / 无章节 / 章节内无路径
 // Issue 模板实测有两种写法，都要认：
 //   "- 允许：`a.mjs`"                      （单行内联）
 //   "允许：" + 后续 "- `a.mjs`" 列表        （#2 用的写法）
@@ -65,6 +71,7 @@ function globToRe(glob) {
   return new RegExp(`^${body}$`);
 }
 
+// test: inScope：白名单文件与目录前缀 / glob 目录白名单 / 空白名单
 export function inScope(file, allowed) {
   if (!Array.isArray(allowed) || allowed.length === 0) return false;
   return allowed.some((a) => {
@@ -78,6 +85,7 @@ export function inScope(file, allowed) {
 
 const isAssertLine = (l) => /\b(assert|expect)\b/.test(l);
 
+// test: assertionDelta：只新增断言为正数 / 只删除断言为负数 / 非断言行改动为 0
 export function assertionDelta(files) {
   return files
     .filter((f) => /(^|\/)(test|tests|__tests__)\/|\.test\./.test(f.filename))
@@ -91,28 +99,35 @@ export function assertionDelta(files) {
     }, 0);
 }
 
+// test: parseQa / qaRounds 全部用例
 const COMMIT = /被测\s*commit\s*[:：]\s*`?\**([0-9a-f]{7,40})/i;
+const COMMIT_ALL = new RegExp(COMMIT.source, 'gi');
 const QA_TAGGED = /QA\s*结论\s*[:：]\s*\**\s*(PASS|FAIL|BLOCKED)/gi;
-const QA_BARE = /^\s*\**\s*(PASS|FAIL|BLOCKED)\s*\**\s*$/gim;
+
+// 裸结论只认「首个非空行」，不接受正文中间独立成行的 PASS/FAIL。
+// 放宽到全文会误吃 QA 评论里粘贴的测试日志（日志里常出现孤立 PASS/FAIL）。
+const firstNonEmpty = (text) => text.split(/\r?\n/).find((l) => l.trim() !== '') ?? '';
+const QA_BARE = /^\s*\**\s*(PASS|FAIL|BLOCKED)\s*\**\s*$/i;
 
 // 实测 #7 第二轮 QA 省掉了 "QA 结论：" 前缀，直接首行写 PASS。
-// 回退规则要求同一条评论里出现 "被测 commit"，否则不算结论，避免把正文里的 PASS 误读。
+// 回退规则要求同一条评论里出现 "被测 commit"，否则不算结论。
 export function qaRounds(body = '') {
   const text = String(body);
   const tagged = [...text.matchAll(QA_TAGGED)];
   if (tagged.length) return tagged.map((m) => m[1].toUpperCase());
   if (!COMMIT.test(text)) return [];
-  const bare = [...text.matchAll(QA_BARE)];
-  return bare.map((m) => m[1].toUpperCase());
+  const bare = firstNonEmpty(text).match(QA_BARE);
+  return bare ? [bare[1].toUpperCase()] : [];
 }
 
 export function parseQa(body = '') {
   const text = String(body);
-  const commit = text.match(COMMIT);
-  if (!commit) return null;
+  // 一条评论里贴多轮记录时，结论与 commit 都取最后一组，避免 PASS 配上上一轮的 FAIL commit
+  const commits = [...text.matchAll(COMMIT_ALL)];
+  if (!commits.length) return null;
   const rounds = qaRounds(text);
   if (!rounds.length) return null;
-  return { result: rounds.at(-1), commit: commit[1].toLowerCase() };
+  return { result: rounds.at(-1), commit: commits.at(-1)[1].toLowerCase() };
 }
 
 const hours = (a, b) => (b ? +((new Date(b) - new Date(a)) / 3.6e6).toFixed(2) : null);
