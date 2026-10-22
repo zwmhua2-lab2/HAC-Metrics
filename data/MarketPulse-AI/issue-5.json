@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "project": "MarketPulse-AI",
+  "issue": 5,
+  "risk": "高",
+  "issue_opened": "2026-10-21T18:05:03Z",
+  "issue_closed": "2026-10-21T18:46:00Z",
+  "prs": [
+    {
+      "number": 6,
+      "commits": 2,
+      "rework": 1,
+      "opened": "2026-10-21T18:10:55Z",
+      "merged": "2026-10-21T18:45:58Z",
+      "hours_issue_to_pr": 0.1,
+      "qa": {
+        "result": "PASS",
+        "sha_match": true,
+        "fail_count": 1
+      },
+      "scope": "ok",
+      "violating_files": [],
+      "assertion_delta": 9
+    }
+  ],
+  "collected_at": "2026-10-22T06:23:28.103Z"
+}
