@@ -1,9 +1,14 @@
 // 只采集 GitHub 上可观察的客观事实，不做判断，不调用模型。
 // 解析不出来一律写 unknown / null，不推断。
 //
+// ⛔ 解析规则已冻结（2026-10-22）：在 data/MarketPulse-AI/ 达到 10 个 issue-N.json 之前，
+//   不改任何解析正则、不加解析分支。理由：3 条样本已经触发两轮修订，改得比样本快，
+//   数据就永远不能被用来判断。解冻后每次改动必须附一个真实失败样本——某个已采集
+//   JSON 确实算错了，并能指出错在哪一行输出。"这种格式以后可能会出现"不算理由。
+//   未验证项表里的条目是已知限制，不是待修 bug。
+//
 // ⚠ 改这里的任何解析正则，必须同步改 test/collect.test.mjs 对应用例。
-//   解析规则是这套数据的唯一误差来源，没有测试覆盖的改动不要合。
-//   每个正则上方的 "test:" 注释标明它由哪些用例守着。
+//   每条正则上方的 // test: 注释标出守着它的用例名，下面的元测试会检查引用是否真实存在。
 import { mkdir, writeFile, readdir } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 
@@ -21,6 +26,7 @@ export function parseRisk(body = '') {
   return m ? m[1] : 'unknown';
 }
 
+// test: parseAllowed：块格式只取允许列表，含 node:test 的内联代码不算路径
 const quoteRe = /`([^`\n]+)`/g;
 const looksLikePath = (p) => !!p && !/\s/.test(p) && !/^[a-z][a-z0-9+.-]*:/i.test(p);
 
@@ -99,14 +105,17 @@ export function assertionDelta(files) {
     }, 0);
 }
 
-// test: parseQa / qaRounds 全部用例
+// test: parseQa：QA 结论前缀，大小写与全角冒号均可
 const COMMIT = /被测\s*commit\s*[:：]\s*`?\**([0-9a-f]{7,40})/i;
+// test: 边界：一条评论贴两轮记录时，结论与 commit 取最后一组
 const COMMIT_ALL = new RegExp(COMMIT.source, 'gi');
+// test: qaRounds：统计同一 PR 多轮结论
 const QA_TAGGED = /QA\s*结论\s*[:：]\s*\**\s*(PASS|FAIL|BLOCKED)/gi;
 
 // 裸结论只认「首个非空行」，不接受正文中间独立成行的 PASS/FAIL。
 // 放宽到全文会误吃 QA 评论里粘贴的测试日志（日志里常出现孤立 PASS/FAIL）。
 const firstNonEmpty = (text) => text.split(/\r?\n/).find((l) => l.trim() !== '') ?? '';
+// test: parseQa：省略前缀、首行裸结论仍可识别（实测 #7 第二轮格式）
 const QA_BARE = /^\s*\**\s*(PASS|FAIL|BLOCKED)\s*\**\s*$/i;
 
 // 实测 #7 第二轮 QA 省掉了 "QA 结论：" 前缀，直接首行写 PASS。

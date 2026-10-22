@@ -1,7 +1,9 @@
 // 这些用例是 scripts/collect.mjs 解析正则的唯一护栏。
 // 只改正则不加用例 = 悄悄改数据口径。改这里等于改口径，commit message 要写明。
+// 解析规则已冻结，解冻条件见 scripts/collect.mjs 顶部。
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import {
   parseAllowed,
   parseRisk,
@@ -188,4 +190,31 @@ test('边界：一条评论贴两轮记录时，结论与 commit 取最后一组
 test('边界：多轮记录的 fail_count 由 qaRounds 全量统计', () => {
   const body = 'QA 结论：FAIL\n被测 commit：9741830\nQA 结论：PASS\n被测 commit：a3110ad';
   assert.deepEqual(qaRounds(body), ['FAIL', 'PASS']);
+});
+
+// 元测试：只检查形式（注释存在、引用的用例存在），不检查改动是否合理。
+// 「必须有真实失败样本才能改」无法自动化，那条只能靠人守。
+test('元：每条顶层正则上方都有 // test: 注释，且引用的用例确实存在', async () => {
+  const read = (p) => readFile(new URL(p, import.meta.url), 'utf8');
+  const src = await read('../scripts/collect.mjs');
+  const specs = await read('./collect.test.mjs');
+  const lines = src.split(/\r?\n/);
+  const isRegexDef = (l) => /^const\s+[A-Za-z_$][\w$]*\s*=\s*(\/|new RegExp\()/.test(l);
+
+  const defs = lines.map((l, i) => ({ l, i })).filter(({ l }) => isRegexDef(l));
+  assert.ok(defs.length >= 5, `预期至少 5 条顶层正则，实际找到 ${defs.length}`);
+
+  for (const { l, i } of defs) {
+    let j = i - 1;
+    while (j >= 0 && lines[j].trim() === '') j--;
+    const comment = lines[j] ?? '';
+    const head = l.trim().slice(0, 48);
+    assert.ok(comment.startsWith('// test: '), `${head} 上方缺少 // test: 注释`);
+
+    const names = comment.slice(9).split(' / ').map((s) => s.trim()).filter(Boolean);
+    assert.ok(names.length > 0, `${head} 的 // test: 注释没有引用任何用例`);
+    for (const name of names) {
+      assert.ok(specs.includes(name), `${head} 引用的用例不存在于测试文件：${name}`);
+    }
+  }
 });
