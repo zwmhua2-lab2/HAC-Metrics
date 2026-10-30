@@ -1,0 +1,23 @@
+{
+  "schema": 1,
+  "project": "MarketPulse-AI",
+  "issue": 13,
+  "risk": "unknown",
+  "issue_opened": "2026-10-30T00:47:00Z",
+  "issue_closed": "2026-10-30T05:40:07Z",
+  "prs": [
+    {
+      "number": 14,
+      "commits": 1,
+      "rework": 0,
+      "opened": "2026-10-30T04:34:55Z",
+      "merged": "2026-10-30T05:40:05Z",
+      "hours_issue_to_pr": 3.8,
+      "qa": null,
+      "scope": "unknown",
+      "violating_files": null,
+      "assertion_delta": 20
+    }
+  ],
+  "collected_at": "2026-10-30T08:36:04.839Z"
+}
